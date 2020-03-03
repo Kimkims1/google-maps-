@@ -7,9 +7,16 @@ import androidx.core.content.ContextCompat;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -20,8 +27,13 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
 
@@ -30,10 +42,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         Toast.makeText(this, "Map is ready", Toast.LENGTH_SHORT).show();
         Log.d(TAG, "onMapReady: map is ready");
         mMap = googleMap;
-        if (mLocationPermissionGranted){
+        if (mLocationPermissionGranted) {
             getDeviceLocation();
             mMap.setMyLocationEnabled(true);
             mMap.getUiSettings().setMyLocationButtonEnabled(false);
+
+            init();
         }
     }
 
@@ -43,6 +57,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final String COURSE_LOCATION = Manifest.permission.ACCESS_COARSE_LOCATION;
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1234;
     private static final float DEFAULT_ZOOM = 15f;
+
+    //widgets
+    EditText mSearchText;
 
     //vars
     private Boolean mLocationPermissionGranted = false;
@@ -57,8 +74,47 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
+        mSearchText = findViewById(R.id.input_search);
+
         getLocationPermission();
 
+        //init();
+
+    }
+
+    private void init() {
+        Log.d(TAG, "init: initializing.");
+        mSearchText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                        || event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.KEYCODE_ENTER) {
+                    //execute search method here
+                    geoLocate();
+                }
+                return false;
+            }
+        });
+        hideSoftKeyBoard();
+    }
+
+    private void geoLocate() {
+        Log.d(TAG, "geoLocate: geolocating");
+        String searchInput = mSearchText.getText().toString().trim();
+        Geocoder geocoder = new Geocoder(MapsActivity.this);
+
+        List<Address> list = new ArrayList<>();
+        try {
+            list = geocoder.getFromLocationName(searchInput, 1);
+        } catch (IOException e) {
+            Log.d(TAG, "geoLocate: IOException: " + e.getMessage());
+        }
+
+        if (list.size() > 0) {
+            Address address = list.get(0);
+            Log.d(TAG, "geoLocate: found a location: " + address.toString());
+            moveCamera(new LatLng(address.getLatitude(), address.getLongitude()), DEFAULT_ZOOM, address.getAddressLine(0));
+        }
     }
 
     private void getDeviceLocation() {
@@ -73,8 +129,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         if (task.isSuccessful()) {
                             Log.d(TAG, "onComplete: found location");
                             Location currentLocation = (Location) task.getResult();
-                            moveCamera(new LatLng(currentLocation.getLatitude(),currentLocation.getLongitude()),
-                            DEFAULT_ZOOM);
+                            moveCamera(new LatLng(currentLocation.getLatitude(), currentLocation.getLongitude()),
+                                    DEFAULT_ZOOM, "My place");
                         } else {
                             Log.d(TAG, "onComplete: current location is null");
                             Toast.makeText(MapsActivity.this, "unable to get current location", Toast.LENGTH_SHORT).show();
@@ -87,9 +143,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private void moveCamera(LatLng latLng, float zoom) {
+    private void moveCamera(LatLng latLng, float zoom, String title) {
         Log.d(TAG, "moveCamera: moving the camera to: lat: " + latLng.latitude + ", lng: " + latLng.longitude);
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,zoom));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
+        if (!title.equals("My place")) {
+            MarkerOptions markerOptions = new MarkerOptions()
+                    .position(latLng)
+                    .title(title);
+            mMap.addMarker(markerOptions);
+        }
+
+        hideSoftKeyBoard();
     }
 
     private void initMap() {
@@ -142,6 +206,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 }
             }
         }
+    }
+
+    private void hideSoftKeyBoard() {
+        this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
     }
 
 }
